@@ -11,17 +11,23 @@ try {
   // .env is optional
 }
 
-function getUiUrl(): string {
-  if (process.env.UI_URL) return process.env.UI_URL;
+function getCandidates(): string[] {
+  if (process.env.UI_URL) return [process.env.UI_URL];
+  const list: string[] = [];
   const dataDir = process.env.DATA_DIR || 'data';
   try {
     const p = join(dataDir, 'ui-url.txt');
     if (existsSync(p)) {
       const u = readFileSync(p, 'utf8').trim();
-      if (u.startsWith('http')) return u;
+      if (u.startsWith('http')) list.push(u);
     }
-  } catch { /* fallback to default */ }
-  return `http://127.0.0.1:${process.env.UI_PORT || '3800'}`;
+  } catch { /* ignore if missing */ }
+  const defaultPort = Number(process.env.UI_PORT) || 3800;
+  for (let offset = 0; offset <= 4; offset++) {
+    const u = `http://127.0.0.1:${defaultPort + offset}`;
+    if (!list.includes(u)) list.push(u);
+  }
+  return list;
 }
 
 function SymbolRow({ s }: { s: UiSymbolState }) {
@@ -104,7 +110,8 @@ function EventLine({ ev }: { ev: UiEvent }) {
 
 function App() {
   const { exit } = useApp();
-  const [url, setUrl] = useState(getUiUrl());
+  const initialCandidates = getCandidates();
+  const [url, setUrl] = useState(initialCandidates[0] || 'http://127.0.0.1:3800');
   const [connected, setConnected] = useState(false);
   const [killed, setKilled] = useState(false);
   const [symbols, setSymbols] = useState<Record<string, UiSymbolState>>({});
@@ -160,21 +167,25 @@ function App() {
       req.on('error', () => {});
       req.end();
     }
-  });
+  }, { isActive: Boolean(process.stdin.isTTY) });
 
   useEffect(() => {
     let active = true, timer: NodeJS.Timeout | null = null, req: http.ClientRequest | null = null;
+    let candIdx = 0;
     const scheduleRetry = () => {
       if (!active || timer) return;
-      timer = setTimeout(() => { timer = null; connect(); }, 1500);
+      timer = setTimeout(() => { timer = null; connect(); }, 1000);
     };
     const connect = () => {
       if (!active) return;
-      const targetUrl = getUiUrl();
+      const cands = getCandidates();
+      const targetUrl = cands[candIdx % cands.length]!;
+      candIdx++;
       setUrl(targetUrl);
       try {
         req = http.get(`${targetUrl}/api/stream`, (res) => {
           if (res.statusCode !== 200) { setConnected(false); scheduleRetry(); return; }
+          candIdx = cands.indexOf(targetUrl);
           setConnected(true);
           let buf = '';
           res.on('data', (chunk) => {
@@ -228,7 +239,7 @@ function App() {
       <Box flexDirection="column" borderStyle="single" borderColor="gray" paddingX={1} marginTop={1}>
         <Text bold color="yellow">Live Activity Feed</Text>
         {events.slice(-6).map((ev, i) => (
-          <EventLine key={ev.t || i} ev={ev} />
+          <EventLine key={ev.t ? `${ev.t}-${i}` : i} ev={ev} />
         ))}
       </Box>
 
