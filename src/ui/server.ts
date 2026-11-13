@@ -9,6 +9,11 @@ export interface UiSymbolState {
   regime: string;
   stale: string[];
   updatedAt: number;
+  bid?: number;
+  ask?: number;
+  spreadBps?: number;
+  imbalance?: number;
+  funding?: number;
 }
 
 export interface UiDeskState {
@@ -60,15 +65,22 @@ export function createUiServer(
   let attempts = 0;
 
   const updateSnapshot = (ev: UiEvent): void => {
-    events.push(ev);
-    if (events.length > 60) events.shift();
-    if (ev.msg === 'heartbeat' && typeof ev.symbol === 'string') {
+    if (ev.msg !== 'tick') {
+      events.push(ev);
+      if (events.length > 80) events.shift();
+    }
+    if ((ev.msg === 'heartbeat' || ev.msg === 'tick') && typeof ev.symbol === 'string') {
       symbols[ev.symbol] = {
         symbol: ev.symbol,
         mark: Number(ev.mark) || 0,
         regime: String(ev.regime || 'UNKNOWN'),
         stale: Array.isArray(ev.stale) ? (ev.stale as string[]) : [],
         updatedAt: Date.now(),
+        ...(typeof ev.bid === 'number' ? { bid: ev.bid } : {}),
+        ...(typeof ev.ask === 'number' ? { ask: ev.ask } : {}),
+        ...(typeof ev.spreadBps === 'number' ? { spreadBps: ev.spreadBps } : {}),
+        ...(typeof ev.imbalance === 'number' ? { imbalance: ev.imbalance } : {}),
+        ...(typeof ev.funding === 'number' ? { funding: ev.funding } : {}),
       };
     } else if (ev.msg === 'desk' && typeof ev.mode === 'string') {
       desk = ev as unknown as UiDeskState;

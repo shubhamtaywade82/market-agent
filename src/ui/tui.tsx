@@ -104,8 +104,11 @@ function App() {
               setEvents(snap.events || []);
             } else if (parsed.type === 'event') {
               const ev = parsed.event as UiEvent;
-              setEvents((prev) => [...prev.slice(-9), ev]);
-              if (ev.msg === 'heartbeat' && typeof ev.symbol === 'string') {
+              // High-frequency price ticks update ticker cards, not the event history log
+              if (ev.msg !== 'tick') {
+                setEvents((prev) => [...prev.slice(-9), ev]);
+              }
+              if ((ev.msg === 'heartbeat' || ev.msg === 'tick') && typeof ev.symbol === 'string') {
                 setSymbols((prev) => ({
                   ...prev,
                   [ev.symbol as string]: {

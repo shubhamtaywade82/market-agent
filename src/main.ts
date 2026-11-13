@@ -25,12 +25,12 @@ import { Playbook } from './learn/playbook';
 import { runLearnStep } from './learn/step';
 import { RiskDesk } from './risk/desk';
 import { MarketState } from './state/market-state';
-import { jsonLogger, TFS, type Harness, type JournalSink, type Logger, type MarketContext, type Tf } from './types';
+import { colorLogger, TFS, type Harness, type JournalSink, type Logger, type MarketContext, type Tf } from './types';
 import { createUiServer, type UiServerInstance } from './ui/server';
 
 let uiServer: UiServerInstance | null = null;
 const log: Logger = (level, msg, fields = {}) => {
-  jsonLogger(level, msg, fields);
+  colorLogger(level, msg, fields);
   uiServer?.publish({ t: new Date().toISOString(), level, msg, ...fields });
 };
 
@@ -322,6 +322,31 @@ async function main(): Promise<void> {
   ];
   if (cfg.px?.feed === 'push') timers.push(setInterval(() => void pushFeed(), 1_000));
   if (cfg.learnIntervalH > 0) timers.push(setInterval(() => void learn(), cfg.learnIntervalH * 3_600_000));
+  if (uiServer) {
+    timers.push(
+      setInterval(() => {
+        for (const s of cfg.symbols) {
+          const ms = state.get(s);
+          if (ms.mark <= 0) continue;
+          const ctx = ctxOf(s);
+          uiServer?.publish({
+            t: new Date().toISOString(),
+            level: 'info',
+            msg: 'tick',
+            symbol: s,
+            mark: ms.mark,
+            bid: ms.bid,
+            ask: ms.ask,
+            spreadBps: ctx.book.spreadBps,
+            imbalance: ctx.book.imbalance,
+            funding: ctx.derivs.fundingRate,
+            regime: ctx.regime,
+            stale: ctx.quality.reasons,
+          });
+        }
+      }, 1_000)
+    );
+  }
 
   const shutdown = () => {
     log('info', 'shutdown');

@@ -155,3 +155,40 @@ export type Logger = (level: 'info' | 'warn' | 'error', msg: string, fields?: Re
 export const jsonLogger: Logger = (level, msg, fields = {}) => {
   process.stdout.write(JSON.stringify({ t: new Date().toISOString(), level, msg, ...fields }) + '\n');
 };
+
+function formatLogField(key: string, val: unknown): string {
+  if (typeof val === 'number') {
+    if (key.toLowerCase().includes('r') || key.toLowerCase().includes('pnl')) {
+      const col = val > 0 ? '\x1b[32m' : val < 0 ? '\x1b[31m' : '\x1b[33m';
+      return `${col}${val > 0 ? '+' : ''}${val}\x1b[0m`;
+    }
+    return `\x1b[33m${val}\x1b[0m`;
+  }
+  if (key === 'symbol') return `\x1b[36m\x1b[1m${val}\x1b[0m`;
+  if (key === 'regime') {
+    const col = String(val).includes('DOWN') ? '\x1b[31m' : String(val).includes('UP') ? '\x1b[32m' : '\x1b[35m';
+    return `${col}${val}\x1b[0m`;
+  }
+  if (typeof val === 'object' && val !== null) return `\x1b[2m${JSON.stringify(val)}\x1b[0m`;
+  return String(val);
+}
+
+export const colorLogger: Logger = (level, msg, fields = {}) => {
+  // Respect structured machine logging when explicitly requested
+  if (process.env.LOG_FORMAT === 'json') {
+    jsonLogger(level, msg, fields);
+    return;
+  }
+  const time = `\x1b[2m${new Date().toISOString().slice(11, 19)}\x1b[0m`;
+  const lvlTag =
+    level === 'error'
+      ? '\x1b[41m\x1b[37m\x1b[1m ERR \x1b[0m'
+      : level === 'warn'
+      ? '\x1b[43m\x1b[30m\x1b[1m WARN\x1b[0m'
+      : '\x1b[36m\x1b[1mINFO\x1b[0m';
+  const name = `\x1b[1m${msg.padEnd(16)}\x1b[0m`;
+  const extra = Object.entries(fields)
+    .map(([k, v]) => `\x1b[2m${k}=\x1b[0m${formatLogField(k, v)}`)
+    .join(' ');
+  process.stdout.write(`${time} ${lvlTag} ${name} ${extra}\n`);
+};
