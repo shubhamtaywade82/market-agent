@@ -148,6 +148,7 @@ async function main(): Promise<void> {
     run.inflight.add(symbol);
     try {
       const before = ctxOf(symbol);
+      log('info', 'ai_thinking', { symbol, model: cfg.ollama.model, regime: before.regime });
       const { intent, meta } = await decide(before, summarize(st0, before.mark), cfg.ollama, Date.now, briefFor(run, before));
       // Re-read everything after the model call: prices, position and desk may have moved.
       const ctx = ctxOf(symbol);

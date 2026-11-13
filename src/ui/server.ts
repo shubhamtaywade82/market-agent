@@ -14,6 +14,8 @@ export interface UiSymbolState {
   spreadBps?: number;
   imbalance?: number;
   funding?: number;
+  aiDecision?: { action: string; setup: string; accepted: boolean; rejectReason: string | null; latencyMs: number };
+  aiThinking?: boolean;
 }
 
 export interface UiDeskState {
@@ -84,6 +86,17 @@ export function createUiServer(
       };
     } else if (ev.msg === 'desk' && typeof ev.mode === 'string') {
       desk = ev as unknown as UiDeskState;
+    } else if (ev.msg === 'ai_thinking' && typeof ev.symbol === 'string' && symbols[ev.symbol]) {
+      symbols[ev.symbol]!.aiThinking = true;
+    } else if (ev.msg === 'decision' && typeof ev.symbol === 'string' && symbols[ev.symbol]) {
+      symbols[ev.symbol]!.aiThinking = false;
+      symbols[ev.symbol]!.aiDecision = {
+        action: String(ev.action || 'NO_TRADE'),
+        setup: String(ev.setup || 'NONE'),
+        accepted: Boolean(ev.accepted),
+        rejectReason: ev.rejectReason ? String(ev.rejectReason) : null,
+        latencyMs: Number(ev.latencyMs) || 0,
+      };
     }
   };
 
