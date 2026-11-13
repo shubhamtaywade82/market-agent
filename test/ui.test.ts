@@ -56,4 +56,21 @@ describe('UI Server', () => {
     const data2 = await res2.json();
     expect(data2.killed).toBe(false);
   });
+
+  it('automatically falls back to next port when EADDRINUSE occurs', async () => {
+    const srv1 = setup(3459);
+    const dir2 = mkdtempSync(join(tmpdir(), 'ui-test-fallback-'));
+    let boundPort = 0;
+    const srv2 = createUiServer(3459, dir2, (p) => {
+      boundPort = p;
+    });
+
+    // Give it a brief moment to catch EADDRINUSE and retry next port
+    await new Promise((r) => setTimeout(r, 100));
+    expect(boundPort).toBe(3460);
+    expect(srv2.port).toBe(3460);
+
+    await srv2.close();
+    rmSync(dir2, { recursive: true, force: true });
+  });
 });
