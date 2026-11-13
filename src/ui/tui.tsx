@@ -30,21 +30,22 @@ function getCandidates(): string[] {
   return list;
 }
 
-function SymbolRow({ s }: { s: UiSymbolState }) {
+function SymbolRow({ s, cols }: { s: UiSymbolState; cols: number }) {
   const isStale = s.stale && s.stale.length > 0;
   const staleText = isStale ? s.stale.join(',') : 'LIVE';
   const price = s.mark.toFixed(s.symbol.includes('XRP') ? 4 : 2);
+  const reg = cols < 70 ? s.regime.replace('TREND_', '').replace('EXPANSION', 'EXP') : s.regime;
   return (
     <Box>
-      <Box width={12}><Text bold color="cyan">{s.symbol}</Text></Box>
-      <Box width={14}><Text bold color="yellow">{price}</Text></Box>
-      <Box width={26}><Text color="blue">{s.regime}</Text></Box>
-      <Box width={10}><Text color={isStale ? 'red' : 'green'}>{staleText}</Text></Box>
+      <Box width={cols < 70 ? 10 : 12}><Text bold color="cyan">{s.symbol}</Text></Box>
+      <Box width={cols < 70 ? 12 : 14}><Text bold color="yellow">{price}</Text></Box>
+      <Box width={cols < 70 ? 18 : 26}><Text color="blue">{reg}</Text></Box>
+      <Box width={8}><Text color={isStale ? 'red' : 'green'}>{staleText}</Text></Box>
     </Box>
   );
 }
 
-function DeskPanel({ desk, connected }: { desk: UiDeskState | null; connected: boolean }) {
+function DeskPanel({ desk, connected, cols }: { desk: UiDeskState | null; connected: boolean; cols: number }) {
   if (!connected) return <Text dimColor>Risk desk: waiting for engine connection...</Text>;
   if (!desk) return <Text dimColor>Risk desk: synchronizing state...</Text>;
   const dayR = Number(desk.dayR) || 0;
@@ -53,13 +54,13 @@ function DeskPanel({ desk, connected }: { desk: UiDeskState | null; connected: b
   const dd = Math.max(0, (Number(desk.peakR) || 0) - (Number(desk.cumR) || 0));
   const exp = desk.exposure || { positions: 0, riskUnits: 0 };
   return (
-    <Box flexDirection="column" borderStyle="single" borderColor="gray" paddingX={1}>
-      <Text bold color="magenta">Risk Desk Status ({desk.mode})</Text>
-      <Box gap={2} marginTop={1}>
-        <Text>Day PnL: <Text color={rColor} bold>{rSign}{dayR.toFixed(2)} R</Text></Text>
-        <Text>Drawdown: <Text bold color={dd > 3 ? 'red' : 'white'}>{dd.toFixed(2)} R</Text></Text>
-        <Text>Loss Streak: <Text bold>{desk.consecLosses ?? 0}</Text></Text>
-        <Text>Exposure: <Text bold color="cyan">{exp.positions} pos / {exp.riskUnits} R</Text></Text>
+    <Box borderStyle="single" borderColor="gray" paddingX={1} justifyContent="space-between">
+      <Text bold color="magenta">Desk ({desk.mode})</Text>
+      <Box gap={cols < 80 ? 1 : 2}>
+        <Text>Day: <Text color={rColor} bold>{rSign}{dayR.toFixed(2)} R</Text></Text>
+        <Text>DD: <Text bold color={dd > 3 ? 'red' : 'white'}>{dd.toFixed(2)} R</Text></Text>
+        <Text>Streak: <Text bold>{desk.consecLosses ?? 0}</Text></Text>
+        <Text>Exp: <Text bold color="cyan">{exp.positions} pos / {exp.riskUnits} R</Text></Text>
       </Box>
     </Box>
   );
@@ -110,6 +111,10 @@ function EventLine({ ev }: { ev: UiEvent }) {
 
 function App() {
   const { exit } = useApp();
+  const [dimensions, setDimensions] = useState({
+    columns: process.stdout.columns || 80,
+    rows: process.stdout.rows || 24,
+  });
   const initialCandidates = getCandidates();
   const [url, setUrl] = useState(initialCandidates[0] || 'http://127.0.0.1:3800');
   const [connected, setConnected] = useState(false);
@@ -117,6 +122,18 @@ function App() {
   const [symbols, setSymbols] = useState<Record<string, UiSymbolState>>({});
   const [desk, setDesk] = useState<UiDeskState | null>(null);
   const [events, setEvents] = useState<UiEvent[]>([]);
+
+  useEffect(() => {
+    const onResize = () => {
+      setDimensions({
+        columns: process.stdout.columns || 80,
+        rows: process.stdout.rows || 24,
+      });
+      process.stdout.write('\x1b[2J\x1b[H');
+    };
+    process.stdout.on('resize', onResize);
+    return () => { process.stdout.off('resize', onResize); };
+  }, []);
 
   const applyPayload = (raw: string) => {
     try {
@@ -204,9 +221,14 @@ function App() {
     return () => { active = false; if (timer) clearTimeout(timer); req?.destroy(); };
   }, []);
 
+  const symbolCount = Math.max(1, Object.keys(symbols).length);
+  // Overhead: Header (1) + Symbol Box (3 + symbolCount) + Desk Box (3) + Feed Box (3) + Footer (1)
+  const overhead = 11 + symbolCount;
+  const maxEvents = Math.max(1, Math.min(25, dimensions.rows - overhead));
+
   return (
-    <Box flexDirection="column" padding={1}>
-      <Box justifyContent="space-between" marginBottom={1}>
+    <Box flexDirection="column" paddingX={1}>
+      <Box justifyContent="space-between">
         <Text bold color="green">MARKET-AGENT TERMINAL COCKPIT</Text>
         <Box gap={2}>
           <Text color={connected ? 'green' : 'yellow'}>
@@ -216,12 +238,12 @@ function App() {
         </Box>
       </Box>
 
-      <Box flexDirection="column" borderStyle="single" borderColor="cyan" paddingX={1} marginBottom={1}>
-        <Box marginBottom={1}>
-          <Box width={12}><Text bold underline>Symbol</Text></Box>
-          <Box width={14}><Text bold underline>Mark Price</Text></Box>
-          <Box width={26}><Text bold underline>Regime</Text></Box>
-          <Box width={10}><Text bold underline>Status</Text></Box>
+      <Box flexDirection="column" borderStyle="single" borderColor="cyan" paddingX={1}>
+        <Box>
+          <Box width={dimensions.columns < 70 ? 10 : 12}><Text bold underline>Symbol</Text></Box>
+          <Box width={dimensions.columns < 70 ? 12 : 14}><Text bold underline>Mark Price</Text></Box>
+          <Box width={dimensions.columns < 70 ? 18 : 26}><Text bold underline>Regime</Text></Box>
+          <Box width={8}><Text bold underline>Status</Text></Box>
         </Box>
         {Object.values(symbols).length === 0 ? (
           <Text dimColor>
@@ -230,23 +252,25 @@ function App() {
               : 'Runner offline. Run "npm start" in another terminal to start trading engine.'}
           </Text>
         ) : (
-          Object.values(symbols).map((s) => <SymbolRow key={s.symbol} s={s} />)
+          Object.values(symbols).map((s) => <SymbolRow key={s.symbol} s={s} cols={dimensions.columns} />)
         )}
       </Box>
 
-      <DeskPanel desk={desk} connected={connected} />
+      <DeskPanel desk={desk} connected={connected} cols={dimensions.columns} />
 
-      <Box flexDirection="column" borderStyle="single" borderColor="gray" paddingX={1} marginTop={1}>
+      <Box flexDirection="column" borderStyle="single" borderColor="gray" paddingX={1}>
         <Text bold color="yellow">Live Activity Feed</Text>
-        {events.slice(-6).map((ev, i) => (
+        {events.slice(-maxEvents).map((ev, i) => (
           <EventLine key={ev.t ? `${ev.t}-${i}` : i} ev={ev} />
         ))}
       </Box>
 
-      <Box marginTop={1} gap={2}>
-        <Text dimColor>[k] Toggle Kill Switch</Text>
-        <Text dimColor>[q] Exit TUI</Text>
-        <Text dimColor>URL: {url}</Text>
+      <Box justifyContent="space-between">
+        <Box gap={2}>
+          <Text dimColor>[k] Toggle Kill</Text>
+          <Text dimColor>[q] Exit</Text>
+        </Box>
+        <Text dimColor>{url} ({dimensions.columns}x{dimensions.rows})</Text>
       </Box>
     </Box>
   );
