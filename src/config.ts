@@ -143,7 +143,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       maxOpenRiskUnits: num(env, 'DESK_MAX_OPEN_RISK', 2),
     },
     learnIntervalH: num(env, 'LEARN_INTERVAL_H', 24),
-    uiPort: num(env, 'UI_PORT', 3300),
+    uiPort: num(env, 'UI_PORT', 3800),
     px: loadPx(env),
   };
 }

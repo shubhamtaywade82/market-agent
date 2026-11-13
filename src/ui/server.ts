@@ -45,13 +45,19 @@ export interface UiServerInstance {
   port: number;
 }
 
-export function createUiServer(port: number, dataDir: string): UiServerInstance {
+export function createUiServer(
+  port: number,
+  dataDir: string,
+  onListening?: (boundPort: number) => void
+): UiServerInstance {
   const clients = new Set<ServerResponse>();
   const killFile = join(dataDir, 'KILL');
   const symbols: Record<string, UiSymbolState> = {};
   const events: UiEvent[] = [];
   let desk: UiDeskState | null = null;
   const positions: Array<Record<string, unknown>> = [];
+  let currentPort = port;
+  let attempts = 0;
 
   const updateSnapshot = (ev: UiEvent): void => {
     events.push(ev);
@@ -129,10 +135,25 @@ export function createUiServer(port: number, dataDir: string): UiServerInstance 
     }
   });
 
-  server.listen(port, '0.0.0.0');
+  server.on('listening', () => {
+    onListening?.(currentPort);
+  });
+
+  server.on('error', (err: NodeJS.ErrnoException) => {
+    // If port is occupied, try next port up to 5 times before falling back silently
+    if (err.code === 'EADDRINUSE' && attempts < 5) {
+      attempts++;
+      currentPort++;
+      server.listen(currentPort, '0.0.0.0');
+    }
+  });
+
+  server.listen(currentPort, '0.0.0.0');
 
   return {
-    port,
+    get port() {
+      return currentPort;
+    },
     publish(ev: UiEvent): void {
       updateSnapshot(ev);
       // Zero-cost when no clients are connected:

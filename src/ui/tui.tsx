@@ -3,7 +3,7 @@ import { render, Box, Text, useApp, useInput } from 'ink';
 import http from 'node:http';
 import type { UiSnapshot, UiSymbolState, UiDeskState, UiEvent } from './server';
 
-const UI_URL = process.env.UI_URL || 'http://127.0.0.1:3300';
+const UI_URL = process.env.UI_URL || 'http://127.0.0.1:3800';
 
 function SymbolRow({ s }: { s: UiSymbolState }) {
   const isStale = s.stale && s.stale.length > 0;

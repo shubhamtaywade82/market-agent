@@ -60,8 +60,9 @@ async function main(): Promise<void> {
   assertNoCredentials();
   const cfg = loadConfig();
   if (cfg.uiPort > 0) {
-    uiServer = createUiServer(cfg.uiPort, cfg.dataDir);
-    log('info', 'ui_server_started', { url: `http://localhost:${cfg.uiPort}` });
+    uiServer = createUiServer(cfg.uiPort, cfg.dataDir, (boundPort) => {
+      log('info', 'ui_server_started', { url: `http://localhost:${boundPort}` });
+    });
   }
   if (cfg.equityUsd === null || !(cfg.equityUsd > 0)) throw new Error('EQUITY_USD is required (account equity used for position sizing).');
   const equity = cfg.equityUsd;
