@@ -1,0 +1,20 @@
+{
+  "name": "market-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p . --noEmit",
+    "test": "vitest run",
+    "start": "tsx src/main.ts",
+    "learn": "tsx src/learn.ts"
+  },
+  "dependencies": { "ws": "^8.18.0", "zod": "^3.23.8" },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/ws": "^8.5.12",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}
