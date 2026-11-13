@@ -116,7 +116,11 @@ async function main(): Promise<void> {
 
   const backfill = async (symbol: string, tf: Tf) => {
     try {
-      state.get(symbol).seed(tf, await fetchKlines(cfg.restBase, symbol, tf, 300, Date.now(), fetch, log));
+      const candles = await fetchKlines(cfg.restBase, symbol, tf, 300, Date.now(), fetch, log);
+      state.get(symbol).seed(tf, candles);
+      if (state.get(symbol).mark <= 0 && candles.length > 0) {
+        state.get(symbol).mark = candles[candles.length - 1]!.c;
+      }
     } catch (err) {
       log('error', 'backfill_failed', { symbol, tf, error: String(err) });
     }
@@ -229,10 +233,20 @@ async function main(): Promise<void> {
       }
     }
   };
+  const emitHeartbeat = () => {
+    const now = Date.now();
+    for (const s of cfg.symbols) {
+      const ctx = ctxOf(s);
+      log('info', 'heartbeat', { symbol: s, regime: ctx.regime, mark: ctx.mark, stale: ctx.quality.reasons, dropped: state.get(s).dropped });
+    }
+    for (const run of runs.values()) log('info', 'desk', { harness: run.harness.id, status: run.harness.status, mode: run.desk.mode(now), ...run.desk.state, exposure: run.exec.exposure() });
+  };
+
   await syncAccounts(true);
   for (const run of runs.values()) await run.exec.reconcile?.(Date.now());
 
   await backfillAll();
+  emitHeartbeat();
   const plan = buildStreamPlan(cfg.symbols);
   const streams = (['market', 'public'] as const).map(
     (route) =>
@@ -311,14 +325,7 @@ async function main(): Promise<void> {
     setInterval(() => {
       for (const g of state.gaps()) void backfill(g.symbol, g.tf);
     }, 15_000),
-    setInterval(() => {
-      const now = Date.now();
-      for (const s of cfg.symbols) {
-        const ctx = ctxOf(s);
-        log('info', 'heartbeat', { symbol: s, regime: ctx.regime, mark: ctx.mark, stale: ctx.quality.reasons, dropped: state.get(s).dropped });
-      }
-      for (const run of runs.values()) log('info', 'desk', { harness: run.harness.id, status: run.harness.status, mode: run.desk.mode(now), ...run.desk.state, exposure: run.exec.exposure() });
-    }, 60_000),
+    setInterval(emitHeartbeat, 60_000),
   ];
   if (cfg.px?.feed === 'push') timers.push(setInterval(() => void pushFeed(), 1_000));
   if (cfg.learnIntervalH > 0) timers.push(setInterval(() => void learn(), cfg.learnIntervalH * 3_600_000));

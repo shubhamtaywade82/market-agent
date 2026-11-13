@@ -147,7 +147,13 @@ export function createUiServer(
     }
   });
 
+  const urlFile = join(dataDir, 'ui-url.txt');
   server.on('listening', () => {
+    try {
+      writeFileSync(urlFile, `http://127.0.0.1:${currentPort}\n`);
+    } catch {
+      // Ignore if dataDir does not exist yet
+    }
     onListening?.(currentPort);
   });
 
@@ -174,6 +180,9 @@ export function createUiServer(
       for (const client of clients) client.write(msg);
     },
     async close(): Promise<void> {
+      try {
+        unlinkSync(urlFile);
+      } catch { /* ignore if already unlinked */ }
       for (const c of clients) c.end();
       clients.clear();
       await new Promise<void>((resolve) => server.close(() => resolve()));

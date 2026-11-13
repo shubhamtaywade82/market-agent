@@ -1,9 +1,28 @@
 import React, { useState, useEffect } from 'react';
 import { render, Box, Text, useApp, useInput } from 'ink';
 import http from 'node:http';
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { UiSnapshot, UiSymbolState, UiDeskState, UiEvent } from './server';
 
-const UI_URL = process.env.UI_URL || 'http://127.0.0.1:3800';
+try {
+  process.loadEnvFile?.();
+} catch {
+  // .env is optional
+}
+
+function getUiUrl(): string {
+  if (process.env.UI_URL) return process.env.UI_URL;
+  const dataDir = process.env.DATA_DIR || 'data';
+  try {
+    const p = join(dataDir, 'ui-url.txt');
+    if (existsSync(p)) {
+      const u = readFileSync(p, 'utf8').trim();
+      if (u.startsWith('http')) return u;
+    }
+  } catch { /* fallback to default */ }
+  return `http://127.0.0.1:${process.env.UI_PORT || '3800'}`;
+}
 
 function SymbolRow({ s }: { s: UiSymbolState }) {
   const isStale = s.stale && s.stale.length > 0;
@@ -19,8 +38,9 @@ function SymbolRow({ s }: { s: UiSymbolState }) {
   );
 }
 
-function DeskPanel({ desk }: { desk: UiDeskState | null }) {
-  if (!desk) return <Text dimColor>Waiting for risk desk telemetry...</Text>;
+function DeskPanel({ desk, connected }: { desk: UiDeskState | null; connected: boolean }) {
+  if (!connected) return <Text dimColor>Risk desk: waiting for engine connection...</Text>;
+  if (!desk) return <Text dimColor>Risk desk: synchronizing state...</Text>;
   const dayR = Number(desk.dayR) || 0;
   const rColor = dayR > 0 ? 'green' : dayR < 0 ? 'red' : 'white';
   const rSign = dayR >= 0 ? '+' : '';
@@ -84,11 +104,44 @@ function EventLine({ ev }: { ev: UiEvent }) {
 
 function App() {
   const { exit } = useApp();
+  const [url, setUrl] = useState(getUiUrl());
   const [connected, setConnected] = useState(false);
   const [killed, setKilled] = useState(false);
   const [symbols, setSymbols] = useState<Record<string, UiSymbolState>>({});
   const [desk, setDesk] = useState<UiDeskState | null>(null);
   const [events, setEvents] = useState<UiEvent[]>([]);
+
+  const applyPayload = (raw: string) => {
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed.type === 'snapshot') {
+        const snap = parsed.data as UiSnapshot;
+        setKilled(snap.killed);
+        setSymbols(snap.symbols || {});
+        setDesk(snap.desk);
+        setEvents(snap.events || []);
+      } else if (parsed.type === 'event') {
+        const ev = parsed.event as UiEvent;
+        if (ev.msg !== 'tick') setEvents((prev) => [...prev.slice(-9), ev]);
+        if ((ev.msg === 'heartbeat' || ev.msg === 'tick') && typeof ev.symbol === 'string') {
+          setSymbols((prev) => ({
+            ...prev,
+            [ev.symbol as string]: {
+              symbol: ev.symbol as string,
+              mark: Number(ev.mark) || 0,
+              regime: String(ev.regime || ''),
+              stale: Array.isArray(ev.stale) ? (ev.stale as string[]) : [],
+              updatedAt: Date.now(),
+            },
+          }));
+        } else if (ev.msg === 'desk') {
+          setDesk(ev as unknown as UiDeskState);
+        }
+      } else if (parsed.type === 'kill') {
+        setKilled(Boolean(parsed.killed));
+      }
+    } catch { /* ignore parse error */ }
+  };
 
   useInput((input, key) => {
     if (input === 'q' || (key.ctrl && input === 'c')) {
@@ -96,7 +149,7 @@ function App() {
       exit();
     }
     if (input === 'k') {
-      const req = http.request(`${UI_URL}/api/kill`, { method: 'POST' });
+      const req = http.request(`${url}/api/kill`, { method: 'POST' });
       req.on('response', (res) => {
         let body = '';
         res.on('data', (c) => body += c);
@@ -110,56 +163,34 @@ function App() {
   });
 
   useEffect(() => {
-    let active = true;
-    const req = http.get(`${UI_URL}/api/stream`, (res) => {
-      if (res.statusCode !== 200) { setConnected(false); return; }
-      setConnected(true);
-      let buf = '';
-      res.on('data', (chunk) => {
-        if (!active) return;
-        buf += chunk.toString();
-        const lines = buf.split('\n\n');
-        buf = lines.pop() || '';
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue;
-          try {
-            const parsed = JSON.parse(line.slice(6));
-            if (parsed.type === 'snapshot') {
-              const snap = parsed.data as UiSnapshot;
-              setKilled(snap.killed);
-              setSymbols(snap.symbols || {});
-              setDesk(snap.desk);
-              setEvents(snap.events || []);
-            } else if (parsed.type === 'event') {
-              const ev = parsed.event as UiEvent;
-              // High-frequency price ticks update ticker cards, not the event history log
-              if (ev.msg !== 'tick') {
-                setEvents((prev) => [...prev.slice(-9), ev]);
-              }
-              if ((ev.msg === 'heartbeat' || ev.msg === 'tick') && typeof ev.symbol === 'string') {
-                setSymbols((prev) => ({
-                  ...prev,
-                  [ev.symbol as string]: {
-                    symbol: ev.symbol as string,
-                    mark: Number(ev.mark) || 0,
-                    regime: String(ev.regime || ''),
-                    stale: Array.isArray(ev.stale) ? (ev.stale as string[]) : [],
-                    updatedAt: Date.now(),
-                  },
-                }));
-              } else if (ev.msg === 'desk') {
-                setDesk(ev as unknown as UiDeskState);
-              }
-            } else if (parsed.type === 'kill') {
-              setKilled(Boolean(parsed.killed));
-            }
-          } catch { /* ignore parse error */ }
-        }
-      });
-      res.on('close', () => { if (active) setConnected(false); });
-    });
-    req.on('error', () => { if (active) setConnected(false); });
-    return () => { active = false; req.destroy(); };
+    let active = true, timer: NodeJS.Timeout | null = null, req: http.ClientRequest | null = null;
+    const scheduleRetry = () => {
+      if (!active || timer) return;
+      timer = setTimeout(() => { timer = null; connect(); }, 1500);
+    };
+    const connect = () => {
+      if (!active) return;
+      const targetUrl = getUiUrl();
+      setUrl(targetUrl);
+      try {
+        req = http.get(`${targetUrl}/api/stream`, (res) => {
+          if (res.statusCode !== 200) { setConnected(false); scheduleRetry(); return; }
+          setConnected(true);
+          let buf = '';
+          res.on('data', (chunk) => {
+            if (!active) return;
+            buf += chunk.toString();
+            const lines = buf.split('\n\n');
+            buf = lines.pop() || '';
+            for (const line of lines) if (line.startsWith('data: ')) applyPayload(line.slice(6));
+          });
+          res.on('close', () => { if (active) { setConnected(false); scheduleRetry(); } });
+        });
+        req.on('error', () => { if (active) { setConnected(false); scheduleRetry(); } });
+      } catch { scheduleRetry(); }
+    };
+    connect();
+    return () => { active = false; if (timer) clearTimeout(timer); req?.destroy(); };
   }, []);
 
   return (
@@ -167,7 +198,9 @@ function App() {
       <Box justifyContent="space-between" marginBottom={1}>
         <Text bold color="green">MARKET-AGENT TERMINAL COCKPIT</Text>
         <Box gap={2}>
-          <Text color={connected ? 'green' : 'red'}>{connected ? '● LIVE' : '○ CONNECTING...'}</Text>
+          <Text color={connected ? 'green' : 'yellow'}>
+            {connected ? '● LIVE' : '○ CONNECTING (retrying...)'}
+          </Text>
           <Text color={killed ? 'red' : 'green'} bold>{killed ? '[KILL ACTIVE]' : '[SAFE]'}</Text>
         </Box>
       </Box>
@@ -180,13 +213,17 @@ function App() {
           <Box width={10}><Text bold underline>Status</Text></Box>
         </Box>
         {Object.values(symbols).length === 0 ? (
-          <Text dimColor>Awaiting symbol ticks from runner...</Text>
+          <Text dimColor>
+            {connected
+              ? 'Awaiting symbol ticks from runner...'
+              : 'Runner offline. Run "npm start" in another terminal to start trading engine.'}
+          </Text>
         ) : (
           Object.values(symbols).map((s) => <SymbolRow key={s.symbol} s={s} />)
         )}
       </Box>
 
-      <DeskPanel desk={desk} />
+      <DeskPanel desk={desk} connected={connected} />
 
       <Box flexDirection="column" borderStyle="single" borderColor="gray" paddingX={1} marginTop={1}>
         <Text bold color="yellow">Live Activity Feed</Text>
@@ -198,7 +235,7 @@ function App() {
       <Box marginTop={1} gap={2}>
         <Text dimColor>[k] Toggle Kill Switch</Text>
         <Text dimColor>[q] Exit TUI</Text>
-        <Text dimColor>URL: {UI_URL}</Text>
+        <Text dimColor>URL: {url}</Text>
       </Box>
     </Box>
   );
