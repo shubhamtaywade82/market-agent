@@ -436,9 +436,14 @@
       applyLogFilter();
     }
 
+    function isPnlOrRKey(key) {
+      const k = String(key).toLowerCase();
+      return k === 'r' || k === 'dayr' || k.endsWith('_r') || k.includes('pnl');
+    }
+
     function formatLogVal(key, val) {
       if (typeof val === 'number') {
-        if (key.toLowerCase().includes('r') || key.toLowerCase().includes('pnl')) {
+        if (isPnlOrRKey(key)) {
           const col = val > 0 ? 'var(--neon-green)' : val < 0 ? 'var(--neon-red)' : 'var(--neon-amber)';
           return `<span style="color:${col};font-weight:700;">${val > 0 ? '+' : ''}${val}</span>`;
         }

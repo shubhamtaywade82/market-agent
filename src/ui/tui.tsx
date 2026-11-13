@@ -39,17 +39,45 @@ function DeskPanel({ desk }: { desk: UiDeskState | null }) {
   );
 }
 
+function EventContent({ ev }: { ev: UiEvent }) {
+  if (ev.msg === 'heartbeat') {
+    return (
+      <Box gap={1}>
+        <Text color="cyan" bold>{String(ev.symbol)}</Text>
+        <Text dimColor>@</Text><Text color="yellow" bold>{String(ev.mark)}</Text>
+        <Text color="magenta">({String(ev.regime)})</Text>
+      </Box>
+    );
+  }
+  if (ev.msg === 'desk') {
+    const dayR = Number(ev.dayR) || 0, col = dayR > 0 ? 'green' : dayR < 0 ? 'red' : 'white';
+    return (
+      <Box gap={1}>
+        <Text color="magenta" bold>{String(ev.mode)}</Text>
+        <Text dimColor>DayR=</Text><Text color={col} bold>{dayR >= 0 ? '+' : ''}{dayR.toFixed(2)} R</Text>
+      </Box>
+    );
+  }
+  if (ev.msg === 'trade_closed') {
+    const r = Number(ev.r) || 0, col = r > 0 ? 'green' : r < 0 ? 'red' : 'yellow';
+    return (
+      <Box gap={1}>
+        <Text color="red" bold>TRADE CLOSED</Text><Text color="cyan" bold>{String(ev.symbol)}</Text>
+        <Text color={col} bold>{r >= 0 ? '+' : ''}{String(ev.r)} R</Text><Text dimColor>exit={String(ev.exit)}</Text>
+      </Box>
+    );
+  }
+  return <Text>{ev.msg}</Text>;
+}
+
 function EventLine({ ev }: { ev: UiEvent }) {
   const time = (ev.t || '').slice(11, 19);
   const color = ev.level === 'error' ? 'red' : ev.level === 'warn' ? 'yellow' : 'cyan';
-  let summary = ev.msg;
-  if (ev.msg === 'heartbeat') summary = `${ev.symbol} @ ${ev.mark} (${ev.regime})`;
-  else if (ev.msg === 'desk') summary = `mode=${ev.mode} dayR=${ev.dayR}`;
   return (
     <Box gap={1}>
       <Text dimColor>[{time}]</Text>
       <Text color={color} bold>{(ev.level || 'INFO').toUpperCase().padEnd(5)}</Text>
-      <Text>{summary}</Text>
+      <EventContent ev={ev} />
     </Box>
   );
 }

@@ -156,9 +156,14 @@ export const jsonLogger: Logger = (level, msg, fields = {}) => {
   process.stdout.write(JSON.stringify({ t: new Date().toISOString(), level, msg, ...fields }) + '\n');
 };
 
+function isPnlOrRKey(key: string): boolean {
+  const k = key.toLowerCase();
+  return k === 'r' || k === 'dayr' || k.endsWith('_r') || k.includes('pnl');
+}
+
 function formatLogField(key: string, val: unknown): string {
   if (typeof val === 'number') {
-    if (key.toLowerCase().includes('r') || key.toLowerCase().includes('pnl')) {
+    if (isPnlOrRKey(key)) {
       const col = val > 0 ? '\x1b[32m' : val < 0 ? '\x1b[31m' : '\x1b[33m';
       return `${col}${val > 0 ? '+' : ''}${val}\x1b[0m`;
     }
