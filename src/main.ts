@@ -25,7 +25,14 @@ import { Playbook } from './learn/playbook';
 import { runLearnStep } from './learn/step';
 import { RiskDesk } from './risk/desk';
 import { MarketState } from './state/market-state';
-import { jsonLogger as log, TFS, type Harness, type JournalSink, type MarketContext, type Tf } from './types';
+import { jsonLogger, TFS, type Harness, type JournalSink, type Logger, type MarketContext, type Tf } from './types';
+import { createUiServer, type UiServerInstance } from './ui/server';
+
+let uiServer: UiServerInstance | null = null;
+const log: Logger = (level, msg, fields = {}) => {
+  jsonLogger(level, msg, fields);
+  uiServer?.publish({ t: new Date().toISOString(), level, msg, ...fields });
+};
 
 interface Run {
   harness: Harness;
@@ -52,6 +59,10 @@ async function main(): Promise<void> {
   }
   assertNoCredentials();
   const cfg = loadConfig();
+  if (cfg.uiPort > 0) {
+    uiServer = createUiServer(cfg.uiPort, cfg.dataDir);
+    log('info', 'ui_server_started', { url: `http://localhost:${cfg.uiPort}` });
+  }
   if (cfg.equityUsd === null || !(cfg.equityUsd > 0)) throw new Error('EQUITY_USD is required (account equity used for position sizing).');
   const equity = cfg.equityUsd;
   const state = new MarketState(cfg.symbols);
@@ -315,6 +326,7 @@ async function main(): Promise<void> {
     log('info', 'shutdown');
     for (const t of timers) clearInterval(t);
     for (const s of streams) s.stop();
+    void uiServer?.close();
     process.exit(0);
   };
   process.on('SIGINT', shutdown);

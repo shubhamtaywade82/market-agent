@@ -7,11 +7,14 @@ Paper execution only. No credentials, no order placement.
 
 ```
 npm install
-npm test                 # 94 tests
+npm test                 # 97 tests
 ollama pull openbmb/minicpm5-2b
-EQUITY_USD=<your equity> npm start   # live data + sized paper positions, journals in ./data
+npm start                # live data + sized paper positions, journals in ./data (opens UI on :3300)
+npm run tui              # live React + Ink terminal cockpit
 npm run learn            # optional: the runner already does this every LEARN_INTERVAL_H
 ```
+
+Open `http://localhost:3300` in any browser to view the real-time Web Cockpit (live mark prices, regimes, risk desk metrics, event stream, and kill switch). If the browser is closed, the runner continues headless with zero overhead.
 
 `touch data/KILL` cancels resting entries, flattens every position and blocks new ones until the file is removed.
 

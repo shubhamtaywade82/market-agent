@@ -22,6 +22,8 @@ export interface AppConfig {
   desk: DeskLimits;
   /** Hours between automatic learning steps inside the runner. 0 disables. */
   learnIntervalH: number;
+  /** UI server port for web dashboard and SSE stream. 0 disables the server. */
+  uiPort: number;
   /** null = in-memory paper fills. Set PX_URL to route orders to a paper_exchange server. */
   px: PxConfig | null;
 }
@@ -141,6 +143,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       maxOpenRiskUnits: num(env, 'DESK_MAX_OPEN_RISK', 2),
     },
     learnIntervalH: num(env, 'LEARN_INTERVAL_H', 24),
+    uiPort: num(env, 'UI_PORT', 3300),
     px: loadPx(env),
   };
 }

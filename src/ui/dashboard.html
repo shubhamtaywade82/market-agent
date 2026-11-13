@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Market Agent Cockpit</title>
+  <style>
+    :root {
+      --bg: #0b0e14;
+      --card: #151921;
+      --border: #232a35;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --green: #2ea043;
+      --red: #f85149;
+      --blue: #58a6ff;
+      --amber: #d29922;
+      --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      padding: 1.25rem;
+      font-size: 14px;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.25rem;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 0.75rem;
+    }
+    .brand { font-size: 1.2rem; font-weight: 700; letter-spacing: 0.05em; font-family: var(--font-mono); }
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-family: var(--font-mono);
+      font-weight: 600;
+      background: rgba(46, 160, 67, 0.15);
+      color: var(--green);
+    }
+    .status-badge.offline { background: rgba(248, 81, 73, 0.15); color: var(--red); }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+    .btn-kill {
+      padding: 6px 14px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      font-family: var(--font-mono);
+      font-weight: 600;
+      cursor: pointer;
+      background: var(--card);
+      color: var(--text);
+      transition: all 0.2s;
+    }
+    .btn-kill.active { background: var(--red); color: #fff; border-color: var(--red); }
+    .grid { display: grid; gap: 1rem; margin-bottom: 1rem; }
+    .symbols-grid { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+    .desk-grid { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem;
+    }
+    .card-title { font-size: 11px; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; font-weight: 600; }
+    .price-val {
+      font-size: 1.8rem;
+      font-family: var(--font-mono);
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      transition: color 0.3s;
+    }
+    .flash-up { color: var(--green); }
+    .flash-down { color: var(--red); }
+    .tag {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-family: var(--font-mono);
+      font-weight: 600;
+      margin-top: 6px;
+    }
+    .tag-regime { background: rgba(88, 166, 255, 0.15); color: var(--blue); }
+    .tag-stale { background: rgba(210, 153, 34, 0.2); color: var(--amber); }
+    .tag-fresh { background: rgba(46, 160, 67, 0.15); color: var(--green); }
+    .metric-val { font-size: 1.4rem; font-family: var(--font-mono); font-weight: 600; }
+    .log-box {
+      background: #06090e;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.75rem;
+      height: 320px;
+      overflow-y: auto;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .log-line { display: flex; gap: 8px; margin-bottom: 4px; }
+    .log-time { color: var(--muted); }
+    .log-info { color: var(--blue); }
+    .log-warn { color: var(--amber); }
+    .log-error { color: var(--red); }
+  </style>
+</head>
+<body>
+  <header>
+    <div style="display: flex; align-items: center; gap: 1rem;">
+      <span class="brand">MARKET-AGENT COCKPIT</span>
+      <span id="conn-badge" class="status-badge offline"><span class="dot"></span><span id="conn-text">OFFLINE</span></span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 0.75rem;">
+      <span id="harness-tag" class="tag tag-regime">HARNESS: --</span>
+      <button id="btn-kill" class="btn-kill" onclick="toggleKill()">KILL SWITCH: SAFE</button>
+    </div>
+  </header>
+
+  <div class="card-title">Live Symbols</div>
+  <div id="symbols-container" class="grid symbols-grid"></div>
+
+  <div class="card-title" style="margin-top: 1rem;">Risk Desk Metrics</div>
+  <div class="grid desk-grid">
+    <div class="card"><div class="card-title">Desk Mode</div><div id="desk-mode" class="metric-val">--</div></div>
+    <div class="card"><div class="card-title">Day PnL (R)</div><div id="desk-day-r" class="metric-val">0.00 R</div></div>
+    <div class="card"><div class="card-title">Drawdown from Peak</div><div id="desk-dd-r" class="metric-val">0.00 R</div></div>
+    <div class="card"><div class="card-title">Consecutive Losses</div><div id="desk-losses" class="metric-val">0</div></div>
+    <div class="card"><div class="card-title">Open Exposure</div><div id="desk-exposure" class="metric-val">0 pos / 0 R</div></div>
+  </div>
+
+  <div class="card-title" style="margin-top: 1rem;">Live Event Stream</div>
+  <div id="log-box" class="log-box"></div>
+
+  <script>
+    const prevMarks = {};
+    const symbolsState = {};
+
+    function updateSymbolCard(sym, s) {
+      let card = document.getElementById(`sym-${sym}`);
+      if (!card) {
+        card = document.createElement('div');
+        card.id = `sym-${sym}`;
+        card.className = 'card';
+        card.innerHTML = `
+          <div class="card-title">${sym}</div>
+          <div id="price-${sym}" class="price-val">--</div>
+          <div style="display: flex; gap: 6px; margin-top: 6px;">
+            <span id="regime-${sym}" class="tag tag-regime">--</span>
+            <span id="stale-${sym}" class="tag tag-fresh">LIVE</span>
+          </div>`;
+        document.getElementById('symbols-container').appendChild(card);
+      }
+      const priceEl = document.getElementById(`price-${sym}`);
+      const oldPrice = prevMarks[sym] || s.mark;
+      priceEl.textContent = s.mark.toFixed(sym.includes('XRP') ? 4 : 2);
+      if (s.mark > oldPrice) {
+        priceEl.className = 'price-val flash-up';
+        setTimeout(() => priceEl.className = 'price-val', 400);
+      } else if (s.mark < oldPrice) {
+        priceEl.className = 'price-val flash-down';
+        setTimeout(() => priceEl.className = 'price-val', 400);
+      }
+      prevMarks[sym] = s.mark;
+      document.getElementById(`regime-${sym}`).textContent = s.regime;
+      const staleEl = document.getElementById(`stale-${sym}`);
+      if (s.stale && s.stale.length > 0) {
+        staleEl.className = 'tag tag-stale';
+        staleEl.textContent = s.stale.join(',');
+      } else {
+        staleEl.className = 'tag tag-fresh';
+        staleEl.textContent = 'LIVE';
+      }
+    }
+
+    function updateDesk(d) {
+      if (!d) return;
+      document.getElementById('desk-mode').textContent = d.mode || 'NORMAL';
+      const dayEl = document.getElementById('desk-day-r');
+      const r = Number(d.dayR) || 0;
+      dayEl.textContent = `${r >= 0 ? '+' : ''}${r.toFixed(2)} R`;
+      dayEl.style.color = r > 0 ? 'var(--green)' : r < 0 ? 'var(--red)' : 'var(--text)';
+      const dd = Math.max(0, (Number(d.peakR) || 0) - (Number(d.cumR) || 0));
+      document.getElementById('desk-dd-r').textContent = `${dd.toFixed(2)} R`;
+      document.getElementById('desk-losses').textContent = d.consecLosses ?? 0;
+      const exp = d.exposure || { positions: 0, riskUnits: 0 };
+      document.getElementById('desk-exposure').textContent = `${exp.positions} pos / ${exp.riskUnits} R`;
+      if (d.harness) document.getElementById('harness-tag').textContent = `HARNESS: ${d.harness}`;
+    }
+
+    function appendLog(ev) {
+      const box = document.getElementById('log-box');
+      const line = document.createElement('div');
+      line.className = 'log-line';
+      const time = (ev.t || new Date().toISOString()).slice(11, 19);
+      const lvl = (ev.level || 'info').toUpperCase();
+      const lvlClass = `log-${ev.level || 'info'}`;
+      let extra = '';
+      if (ev.msg === 'heartbeat') extra = `${ev.symbol} @ ${ev.mark} (${ev.regime})`;
+      else if (ev.msg === 'desk') extra = `${ev.mode} dayR=${ev.dayR}`;
+      else if (ev.msg === 'trade_closed') extra = `${ev.symbol} exit=${ev.exit} R=${ev.r}`;
+      else extra = JSON.stringify(ev).slice(0, 90);
+      line.innerHTML = `<span class="log-time">[${time}]</span> <span class="${lvlClass}">${lvl}</span> <span>${ev.msg}: ${extra}</span>`;
+      box.appendChild(line);
+      while (box.children.length > 80) box.removeChild(box.firstChild);
+      box.scrollTop = box.scrollHeight;
+    }
+
+    function updateKillBtn(killed) {
+      const btn = document.getElementById('btn-kill');
+      if (killed) {
+        btn.textContent = 'KILL SWITCH: ACTIVE';
+        btn.className = 'btn-kill active';
+      } else {
+        btn.textContent = 'KILL SWITCH: SAFE';
+        btn.className = 'btn-kill';
+      }
+    }
+
+    async function toggleKill() {
+      try {
+        const res = await fetch('/api/kill', { method: 'POST' });
+        const data = await res.json();
+        updateKillBtn(data.killed);
+      } catch (err) {
+        alert('Failed to toggle kill switch: ' + err.message);
+      }
+    }
+
+    function connect() {
+      const es = new EventSource('/api/stream');
+      const badge = document.getElementById('conn-badge');
+      const text = document.getElementById('conn-text');
+      es.onopen = () => {
+        badge.className = 'status-badge';
+        text.textContent = 'LIVE CONNECTED';
+      };
+      es.onerror = () => {
+        badge.className = 'status-badge offline';
+        text.textContent = 'RECONNECTING...';
+      };
+      es.onmessage = (e) => {
+        try {
+          const payload = JSON.parse(e.data);
+          if (payload.type === 'snapshot') {
+            const snap = payload.data;
+            updateKillBtn(snap.killed);
+            updateDesk(snap.desk);
+            if (snap.symbols) Object.values(snap.symbols).forEach(s => updateSymbolCard(s.symbol, s));
+            if (snap.events) snap.events.forEach(appendLog);
+          } else if (payload.type === 'event') {
+            const ev = payload.event;
+            appendLog(ev);
+            if (ev.msg === 'heartbeat' && ev.symbol) updateSymbolCard(ev.symbol, ev);
+            if (ev.msg === 'desk') updateDesk(ev);
+          } else if (payload.type === 'kill') {
+            updateKillBtn(payload.killed);
+          }
+        } catch { /* ignore parse error */ }
+      };
+    }
+    connect();
+  </script>
+</body>
+</html>
