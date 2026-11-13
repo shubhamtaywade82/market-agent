@@ -122,7 +122,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       model: env.OLLAMA_MODEL ?? 'openbmb/minicpm5-2b',
       think: thinkRaw === undefined ? undefined : thinkRaw === 'true',
       temperature: num(env, 'OLLAMA_TEMPERATURE', 0.2),
-      timeoutMs: num(env, 'OLLAMA_TIMEOUT_MS', 20_000),
+      timeoutMs: num(env, 'OLLAMA_TIMEOUT_MS', 60_000),
     },
     leverage,
     liqBufferFrac: num(env, 'LIQ_BUFFER_FRAC', 0.5),
