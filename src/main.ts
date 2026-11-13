@@ -45,6 +45,11 @@ function summarize(st: PosState, mark: number): PositionSummary {
 }
 
 async function main(): Promise<void> {
+  try {
+    process.loadEnvFile?.();
+  } catch {
+    // .env is optional; configuration may come directly from the process environment
+  }
   assertNoCredentials();
   const cfg = loadConfig();
   if (cfg.equityUsd === null || !(cfg.equityUsd > 0)) throw new Error('EQUITY_USD is required (account equity used for position sizing).');
